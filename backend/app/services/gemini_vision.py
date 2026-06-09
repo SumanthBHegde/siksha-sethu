@@ -1,0 +1,140 @@
+"""Gemini Vision register extraction service.
+
+Converts register images (attendance / pm-poshan / stock / audit) into structured JSON.
+"""
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+import google.generativeai as genai
+from PIL import Image
+
+from app.core.config import get_settings
+
+settings = get_settings()
+
+if settings.GOOGLE_API_KEY:
+    genai.configure(api_key=settings.GOOGLE_API_KEY)
+
+
+PROMPTS: dict[str, str] = {
+    "attendance": """You are an expert at reading handwritten Indian government school attendance registers.
+
+Extract the data from this register image and return STRICT JSON with this shape:
+{
+  "register_type": "attendance",
+  "date": "YYYY-MM-DD or null if not visible",
+  "class": "grade/class if visible or null",
+  "section": "section if visible or null",
+  "entries": [
+    {"roll_no": "string", "name": "string", "status": "present|absent|late"}
+  ],
+  "summary": {"total": int, "present": int, "absent": int, "late": int},
+  "notes": "any anomalies, illegible rows, or remarks"
+}
+
+Rules:
+- Use 'present' for ticks (✓, P), 'absent' for crosses (✗, A), 'late' for L.
+- If a row is unreadable, still include it with status='absent' and add a note.
+- Return ONLY the JSON object. No prose, no markdown fences.""",
+
+    "pm_poshan": """You are an expert at reading handwritten Indian government school PM POSHAN (mid-day meal) registers.
+
+Extract the data and return STRICT JSON with this shape:
+{
+  "register_type": "pm_poshan",
+  "date": "YYYY-MM-DD or null",
+  "meal_type": "lunch|breakfast",
+  "beneficiaries": int,
+  "meals_served": int,
+  "ingredients": {
+     "rice_kg": float, "dal_kg": float, "vegetables_kg": float, "oil_l": float
+  },
+  "notes": "any anomalies or remarks"
+}
+
+Return ONLY the JSON object. No prose, no markdown fences.""",
+
+    "stock": """You are an expert at reading handwritten Indian government school stock registers (PM POSHAN supplies).
+
+Extract the data and return STRICT JSON:
+{
+  "register_type": "stock",
+  "date": "YYYY-MM-DD or null",
+  "items": [
+    {"item": "rice|dal|oil|vegetables|...", "opening_kg": float, "received_kg": float, "consumed_kg": float, "closing_kg": float}
+  ],
+  "notes": "any anomalies"
+}
+
+Return ONLY the JSON object. No prose, no markdown fences.""",
+
+    "audit": """You are reading a government school audit-related document.
+
+Extract the data and return STRICT JSON:
+{
+  "register_type": "audit",
+  "doc_type": "best guess: attendance_summary | stock_summary | meal_summary | compliance_certificate | other",
+  "title": "title or heading of the document",
+  "key_fields": {"<field name>": "<value>"},
+  "date_range": "YYYY-MM-DD to YYYY-MM-DD or null",
+  "notes": "any anomalies"
+}
+
+Return ONLY the JSON object."""
+}
+
+
+def _strip_fences(s: str) -> str:
+    s = s.strip()
+    s = re.sub(r"^```(?:json)?\s*", "", s)
+    s = re.sub(r"\s*```$", "", s)
+    return s.strip()
+
+
+def extract_register(image_path: str | Path, register_type: str) -> dict[str, Any]:
+    """Extract structured data from a register image.
+
+    register_type ∈ {"attendance", "pm_poshan", "stock", "audit"}
+    """
+    register_type = register_type.lower().replace("-", "_")
+    prompt = PROMPTS.get(register_type)
+    if not prompt:
+        raise ValueError(f"Unknown register_type: {register_type}")
+
+    if not settings.GOOGLE_API_KEY:
+        return {
+            "register_type": register_type,
+            "error": "GOOGLE_API_KEY not configured",
+            "mock": True,
+            "entries": [],
+        }
+
+    image = Image.open(image_path)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    response = model.generate_content([prompt, image])
+
+    text = _strip_fences(response.text or "")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        return {
+            "register_type": register_type,
+            "error": f"JSON parse failed: {e}",
+            "raw_text": text,
+        }
+
+
+def chat_with_gemini(prompt: str, system: str | None = None) -> str:
+    """Plain text completion via Gemini — used as fallback when no agent matches."""
+    if not settings.GOOGLE_API_KEY:
+        return "[Gemini not configured. Set GOOGLE_API_KEY in backend/.env]"
+    model = genai.GenerativeModel(
+        "gemini-2.5-flash",
+        system_instruction=system or "You are ShikshaSetu, a helpful AI administrative assistant for Indian government school teachers.",
+    )
+    response = model.generate_content(prompt)
+    return (response.text or "").strip()
