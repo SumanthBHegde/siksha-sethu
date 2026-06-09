@@ -5,9 +5,16 @@ import random
 from app.core.database import SessionLocal, Base, engine
 from app.core.security import hash_password
 from app.models import User, Student, AttendanceRecord, MealRecord, StockRecord
+from pathlib import Path
+from app.core.config import get_settings
+
+settings = get_settings()
 
 
 def main():
+    # Ensure data and upload directories exist before creating/opening the DB
+    Path("./data").mkdir(parents=True, exist_ok=True)
+    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

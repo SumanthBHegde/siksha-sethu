@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, date as date_cls
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
 from sqlalchemy.orm import Session
@@ -21,6 +23,124 @@ router = APIRouter(prefix="/api/upload", tags=["upload"])
 settings = get_settings()
 
 
+def _as_list(value: Any) -> list:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        return list(value.values())
+    return []
+
+
+def _as_str(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    return str(value).strip()
+
+
+def _as_number(value: Any, default: float = 0.0) -> float:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return float(default)
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text = str(value).strip()
+    if not text:
+        return default
+
+    text = text.replace(",", "")
+    text = re.sub(r"[^0-9.+-]", "", text)
+    if text in {"", ".", "+", "-"}:
+        return default
+    try:
+        return float(text)
+    except ValueError:
+        return default
+
+
+def _as_int(value: Any, default: int = 0) -> int:
+    return int(round(_as_number(value, float(default))))
+
+
+def _as_date(value: Any) -> date_cls:
+    if isinstance(value, date_cls):
+        return value
+    text = _as_str(value)
+    if not text or text.lower() in {"null", "none", "not visible", "not available"}:
+        return date_cls.today()
+
+    text = text.split(" to ")[0].strip()
+    formats = ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%d.%m.%Y")
+    for fmt in formats:
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    try:
+        return date_cls.fromisoformat(text)
+    except ValueError:
+        return date_cls.today()
+
+
+def _normalize_status(value: Any) -> str:
+    text = _as_str(value, "absent").lower()
+    if text in {"present", "p", "yes", "y", "tick", "checked", "attended", "1", "true"}:
+        return "present"
+    if text in {"late", "l"}:
+        return "late"
+    return "absent"
+
+
+def _normalize_register_payload(register_type: str, data: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(data or {})
+    normalized["register_type"] = register_type
+    normalized["date"] = _as_date(normalized.get("date")).isoformat()
+
+    if register_type == "attendance":
+        entries = normalized.get("entries") or normalized.get("students") or normalized.get("rows")
+        normalized["entries"] = [
+            {
+                "roll_no": _as_str(e.get("roll_no") or e.get("roll") or e.get("serial_no")),
+                "name": _as_str(e.get("name") or e.get("student_name")),
+                "status": _normalize_status(e.get("status") or e.get("attendance")),
+            }
+            for e in _as_list(entries)
+            if isinstance(e, dict)
+        ]
+    elif register_type == "pm_poshan":
+        ingredients = normalized.get("ingredients") or {}
+        normalized["meal_type"] = _as_str(normalized.get("meal_type"), "lunch").lower() or "lunch"
+        normalized["beneficiaries"] = _as_int(normalized.get("beneficiaries"))
+        normalized["meals_served"] = _as_int(normalized.get("meals_served"))
+        normalized["ingredients"] = {
+            "rice_kg": _as_number(ingredients.get("rice_kg") or normalized.get("rice_kg")),
+            "dal_kg": _as_number(ingredients.get("dal_kg") or normalized.get("dal_kg")),
+            "vegetables_kg": _as_number(ingredients.get("vegetables_kg") or normalized.get("vegetables_kg")),
+            "oil_l": _as_number(ingredients.get("oil_l") or normalized.get("oil_l")),
+        }
+    elif register_type == "stock":
+        items = normalized.get("items") or normalized.get("stock_items") or normalized.get("rows")
+        normalized["items"] = [
+            {
+                "item": _as_str(it.get("item") or it.get("name"), "unknown").lower(),
+                "opening_kg": _as_number(it.get("opening_kg") or it.get("opening")),
+                "received_kg": _as_number(it.get("received_kg") or it.get("received")),
+                "consumed_kg": _as_number(it.get("consumed_kg") or it.get("consumed") or it.get("issued_kg")),
+                "closing_kg": _as_number(it.get("closing_kg") or it.get("closing") or it.get("balance_kg")),
+            }
+            for it in _as_list(items)
+            if isinstance(it, dict)
+        ]
+    elif register_type == "audit":
+        normalized["doc_type"] = _as_str(normalized.get("doc_type"), "other") or "other"
+        normalized["title"] = _as_str(normalized.get("title"), "Uploaded document") or "Uploaded document"
+        if not isinstance(normalized.get("key_fields"), dict):
+            normalized["key_fields"] = {}
+
+    return normalized
+
+
 def _save_upload(file: UploadFile, teacher_id: int, register_type: str) -> Path:
     upload_dir = Path(settings.UPLOAD_DIR) / register_type / str(teacher_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -32,11 +152,7 @@ def _save_upload(file: UploadFile, teacher_id: int, register_type: str) -> Path:
 
 def _persist_attendance(db: Session, teacher_id: int, data: dict) -> dict:
     entries = data.get("entries", [])
-    d_str = data.get("date")
-    try:
-        target_date = date_cls.fromisoformat(d_str) if d_str else date_cls.today()
-    except (TypeError, ValueError):
-        target_date = date_cls.today()
+    target_date = _as_date(data.get("date"))
 
     students_by_roll = {
         s.roll_no.strip().lower(): s
@@ -50,11 +166,9 @@ def _persist_attendance(db: Session, teacher_id: int, data: dict) -> dict:
     final_status: dict[int, str] = {}
     skipped: list[dict] = []
     for e in entries:
-        roll = str(e.get("roll_no", "")).strip().lower()
-        name = str(e.get("name", "")).strip().lower()
-        status = e.get("status", "absent")
-        if status not in {"present", "absent", "late"}:
-            status = "absent"
+        roll = _as_str(e.get("roll_no")).lower()
+        name = _as_str(e.get("name")).lower()
+        status = _normalize_status(e.get("status"))
 
         student = students_by_roll.get(roll) or students_by_name.get(name)
         if not student:
@@ -108,23 +222,19 @@ def _persist_attendance(db: Session, teacher_id: int, data: dict) -> dict:
 
 
 def _persist_poshan(db: Session, teacher_id: int, data: dict) -> dict:
-    d_str = data.get("date")
-    try:
-        target_date = date_cls.fromisoformat(d_str) if d_str else date_cls.today()
-    except (TypeError, ValueError):
-        target_date = date_cls.today()
+    target_date = _as_date(data.get("date"))
     ing = data.get("ingredients") or {}
     rec = MealRecord(
         teacher_id=teacher_id,
         date=target_date,
-        meal_type=data.get("meal_type", "lunch"),
-        beneficiaries=int(data.get("beneficiaries") or 0),
-        meals_served=int(data.get("meals_served") or 0),
-        rice_kg=float(ing.get("rice_kg") or 0),
-        dal_kg=float(ing.get("dal_kg") or 0),
-        vegetables_kg=float(ing.get("vegetables_kg") or 0),
-        oil_l=float(ing.get("oil_l") or 0),
-        notes=data.get("notes", ""),
+        meal_type=_as_str(data.get("meal_type"), "lunch") or "lunch",
+        beneficiaries=_as_int(data.get("beneficiaries")),
+        meals_served=_as_int(data.get("meals_served")),
+        rice_kg=_as_number(ing.get("rice_kg")),
+        dal_kg=_as_number(ing.get("dal_kg")),
+        vegetables_kg=_as_number(ing.get("vegetables_kg")),
+        oil_l=_as_number(ing.get("oil_l")),
+        notes=_as_str(data.get("notes")),
         source="register",
     )
     db.add(rec)
@@ -134,21 +244,17 @@ def _persist_poshan(db: Session, teacher_id: int, data: dict) -> dict:
 
 
 def _persist_stock(db: Session, teacher_id: int, data: dict) -> dict:
-    d_str = data.get("date")
-    try:
-        target_date = date_cls.fromisoformat(d_str) if d_str else date_cls.today()
-    except (TypeError, ValueError):
-        target_date = date_cls.today()
+    target_date = _as_date(data.get("date"))
     saved = 0
     for it in data.get("items", []):
         rec = StockRecord(
             teacher_id=teacher_id,
-            item=str(it.get("item", "unknown")).lower().strip(),
+            item=_as_str(it.get("item"), "unknown").lower(),
             date=target_date,
-            opening_kg=float(it.get("opening_kg") or 0),
-            received_kg=float(it.get("received_kg") or 0),
-            consumed_kg=float(it.get("consumed_kg") or 0),
-            closing_kg=float(it.get("closing_kg") or 0),
+            opening_kg=_as_number(it.get("opening_kg")),
+            received_kg=_as_number(it.get("received_kg")),
+            consumed_kg=_as_number(it.get("consumed_kg")),
+            closing_kg=_as_number(it.get("closing_kg")),
             source="register",
         )
         db.add(rec)
@@ -175,6 +281,7 @@ async def upload_register(
         extracted = gemini_vision.extract_register(out_path, register_type)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gemini extraction failed: {e}")
+    extracted = _normalize_register_payload(register_type, extracted)
 
     valid, issues = validation.validate(register_type, extracted)
     extracted_row = ExtractedRegisterData(

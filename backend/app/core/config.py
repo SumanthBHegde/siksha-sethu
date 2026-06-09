@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     GOOGLE_API_KEY: str = ""
+    # OpenAI settings (used after switching from Gemini)
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini-vision"
     SECRET_KEY: str = "dev-secret-change-me"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
     ALGORITHM: str = "HS256"
