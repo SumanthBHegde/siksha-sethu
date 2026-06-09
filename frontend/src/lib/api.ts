@@ -70,6 +70,8 @@ export const api = {
   upload: {
     register: (formData: FormData) =>
       request<any>("/upload/register", { method: "POST", body: formData }),
+    helper: (formData: FormData) =>
+      request<any>("/upload/helper", { method: "POST", body: formData }),
     history: () => request<any[]>("/upload/history"),
   },
 

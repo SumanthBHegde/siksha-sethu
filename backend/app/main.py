@@ -12,6 +12,7 @@ settings = get_settings()
 # Ensure data + upload dirs exist
 Path("./data").mkdir(parents=True, exist_ok=True)
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+Path(settings.AI_RESPONSE_LOG_DIR).mkdir(parents=True, exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
 
