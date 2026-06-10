@@ -240,7 +240,7 @@ def extract_register(image_path: str | Path, register_type: str) -> dict[str, An
         return parsed
 
     image = Image.open(image_path)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-3.5-flash")
     response = model.generate_content(
         [prompt, image],
         generation_config=DETERMINISTIC_GENERATION_CONFIG,
@@ -283,7 +283,7 @@ def extract_auto_register(image_path: str | Path) -> dict[str, Any]:
         return parsed
 
     image = Image.open(image_path)
-    model = genai.GenerativeModel("gemini-2.5-flash")
+    model = genai.GenerativeModel("gemini-3.5-flash")
     response = model.generate_content(
         [AUTO_PROMPT, image],
         generation_config=DETERMINISTIC_GENERATION_CONFIG,
@@ -313,7 +313,7 @@ def chat_with_gemini(prompt: str, system: str | None = None) -> str:
     if not settings.GOOGLE_API_KEY:
         return "[Gemini not configured. Set GOOGLE_API_KEY in backend/.env]"
     model = genai.GenerativeModel(
-        "gemini-2.5-flash",
+        "gemini-3.5-flash",
         system_instruction=system or "You are ShikshaSetu, a helpful AI administrative assistant for Indian government school teachers.",
     )
     response = model.generate_content(
