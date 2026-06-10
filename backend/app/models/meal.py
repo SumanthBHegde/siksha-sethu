@@ -1,22 +1,42 @@
 from datetime import date, datetime
-from sqlalchemy import Integer, String, Date, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
-from app.core.database import Base
+from typing import Optional
+from pydantic import BaseModel, Field
+import uuid
 
 
-class MealRecord(Base):
-    __tablename__ = "meal_records"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    meal_type: Mapped[str] = mapped_column(String(40), default="lunch")
-    beneficiaries: Mapped[int] = mapped_column(Integer, default=0)
-    meals_served: Mapped[int] = mapped_column(Integer, default=0)
-    rice_kg: Mapped[float] = mapped_column(default=0.0)
-    dal_kg: Mapped[float] = mapped_column(default=0.0)
-    vegetables_kg: Mapped[float] = mapped_column(default=0.0)
-    oil_l: Mapped[float] = mapped_column(default=0.0)
-    notes: Mapped[str] = mapped_column(String(500), default="")
-    source: Mapped[str] = mapped_column(String(20), default="manual")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+class MealRecord(BaseModel):
+    """MontyDB document schema for meal records (PM Poshan)."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    teacher_id: str  # User ID
+    date: date
+    meal_type: str = "lunch"  # lunch | breakfast | snacks
+    beneficiaries: int = 0
+    meals_served: int = 0
+    rice_kg: float = 0.0
+    dal_kg: float = 0.0
+    vegetables_kg: float = 0.0
+    oil_l: float = 0.0
+    notes: str = ""
+    source: str = "manual"  # manual | register
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        from_attributes = True
+        
+    def to_dict(self) -> dict:
+        """Convert to dictionary for storage."""
+        return {
+            "id": self.id,
+            "teacher_id": self.teacher_id,
+            "date": self.date.isoformat() if isinstance(self.date, date) else self.date,
+            "meal_type": self.meal_type,
+            "beneficiaries": self.beneficiaries,
+            "meals_served": self.meals_served,
+            "rice_kg": self.rice_kg,
+            "dal_kg": self.dal_kg,
+            "vegetables_kg": self.vegetables_kg,
+            "oil_l": self.oil_l,
+            "notes": self.notes,
+            "source": self.source,
+            "created_at": self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+        }

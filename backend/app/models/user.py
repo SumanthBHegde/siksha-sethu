@@ -1,15 +1,28 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, DateTime
-from sqlalchemy.orm import Mapped, mapped_column
-from app.core.database import Base
+from typing import Optional
+from pydantic import BaseModel, EmailStr, Field
+import uuid
 
 
-class User(Base):
-    __tablename__ = "users"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    name: Mapped[str] = mapped_column(String(120), nullable=False)
-    email: Mapped[str] = mapped_column(String(120), unique=True, nullable=False, index=True)
-    school_name: Mapped[str] = mapped_column(String(200), default="Government School")
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+class User(BaseModel):
+    """MontyDB User document schema for authentication and account management."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    email: EmailStr
+    school_name: str = "Government School"
+    password_hash: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        from_attributes = True
+        
+    def to_dict(self) -> dict:
+        """Convert to dictionary for storage and API responses."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "email": self.email,
+            "school_name": self.school_name,
+            "password_hash": self.password_hash,
+            "created_at": self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+        }

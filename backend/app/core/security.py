@@ -4,10 +4,9 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.database import get_db
+from app.core.database import get_users_collection
 
 settings = get_settings()
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -30,8 +29,11 @@ def create_access_token(subject: str, expires_minutes: Optional[int] = None) -> 
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    from app.models.user import User
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    """Retrieve and validate current user from JWT token.
+    
+    Queries the users collection using MongoDB query language (MQL).
+    """
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -44,7 +46,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_exc
     except JWTError:
         raise credentials_exc
-    user = db.query(User).filter(User.id == int(user_id)).first()
-    if user is None:
+    
+    users_collection = get_users_collection()
+    # Standard MQL syntax to find user by ID
+    user_doc = users_collection.find_one({"id": user_id})
+    if user_doc is None:
         raise credentials_exc
-    return user
+    
+    # Clean up MontyDB internal ID before returning
+    user_doc.pop("_id", None)
+    return user_doc
