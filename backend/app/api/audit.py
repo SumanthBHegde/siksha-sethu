@@ -1,12 +1,11 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form
-from sqlalchemy.orm import Session
 from pathlib import Path
 from datetime import datetime
 
-from app.core.database import get_db
+from app.core.database import get_audit_collection
 from app.core.security import get_current_user
 from app.core.config import get_settings
-from app.models import AuditDocument, User
+from app.models.audit import AuditDocument
 from app.services import analytics
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
@@ -14,8 +13,10 @@ settings = get_settings()
 
 
 @router.get("/readiness")
-def readiness(db: Session = Depends(get_db), current: User = Depends(get_current_user)):
-    return analytics.audit_readiness(db, current.id)
+def readiness(current = Depends(get_current_user)):
+    """Get audit readiness score using MontyDB."""
+    current_id = current.get("id")
+    return analytics.audit_readiness(current_id)
 
 
 @router.post("/documents")
@@ -24,40 +25,56 @@ async def upload_document(
     title: str = Form(""),
     notes: str = Form(""),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current: User = Depends(get_current_user),
+    current = Depends(get_current_user),
 ):
-    upload_dir = Path(settings.UPLOAD_DIR) / "audit" / str(current.id)
+    """Upload an audit document using MontyDB."""
+    audit_col = get_audit_collection()
+    current_id = current.get("id")
+    
+    # Create upload directory
+    upload_dir = Path(settings.UPLOAD_DIR) / "audit" / current_id
     upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate unique filename
     stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_name = f"{stamp}_{file.filename}"
     out_path = upload_dir / safe_name
     out_path.write_bytes(await file.read())
 
+    # Create and store audit document
     doc = AuditDocument(
-        teacher_id=current.id,
+        teacher_id=current_id,
         doc_type=doc_type,
         title=title or file.filename,
         file_path=str(out_path),
         notes=notes,
         status="uploaded",
     )
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
+    audit_col.insert_one(doc.model_dump(mode="json"))
+    
     return {"id": doc.id, "file_path": doc.file_path, "doc_type": doc.doc_type}
 
 
 @router.get("/documents")
-def list_documents(db: Session = Depends(get_db), current: User = Depends(get_current_user)):
-    docs = db.query(AuditDocument).filter(AuditDocument.teacher_id == current.id).order_by(
-        AuditDocument.uploaded_at.desc()
-    ).all()
+def list_documents(current = Depends(get_current_user)):
+    """List audit documents for current user using MontyDB."""
+    audit_col = get_audit_collection()
+    current_id = current.get("id")
+    
+    # Query documents for this teacher
+    docs = list(audit_col.find({"teacher_id": current_id}))
+    
+    # Sort by uploaded_at descending
+    docs.sort(key=lambda x: x.get("uploaded_at", ""), reverse=True)
+    
     return [
         {
-            "id": d.id, "doc_type": d.doc_type, "title": d.title,
-            "status": d.status, "uploaded_at": d.uploaded_at.isoformat(),
-            "notes": d.notes,
+            "id": d.get("id"),
+            "doc_type": d.get("doc_type"),
+            "title": d.get("title"),
+            "status": d.get("status"),
+            "uploaded_at": d.get("uploaded_at"),
+            "notes": d.get("notes"),
         }
         for d in docs
     ]

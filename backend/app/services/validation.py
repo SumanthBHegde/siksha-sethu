@@ -20,7 +20,7 @@ def validate_attendance(data: dict[str, Any]) -> tuple[bool, list[str]]:
 
 def validate_poshan(data: dict[str, Any]) -> tuple[bool, list[str]]:
     issues: list[str] = []
-    if data.get("register_type") != "pm_poshan":
+    if data.get("register_type") not in {"pm_poshan", "daily_pm_poshan"}:
         issues.append("register_type mismatch")
     if not isinstance(data.get("meals_served"), int):
         issues.append("meals_served not an integer")
@@ -30,6 +30,16 @@ def validate_poshan(data: dict[str, Any]) -> tuple[bool, list[str]]:
     benef = data.get("beneficiaries") or 0
     if served and benef and served > benef * 1.05:
         issues.append(f"meals_served ({served}) > beneficiaries ({benef}) — possible over-reporting")
+    return (len(issues) == 0, issues)
+
+
+def validate_monthly_poshan(data: dict[str, Any]) -> tuple[bool, list[str]]:
+    issues: list[str] = []
+    if data.get("register_type") != "monthly_pm_poshan":
+        issues.append("register_type mismatch")
+    entries = data.get("daily_entries", [])
+    if not isinstance(entries, list) or not entries:
+        issues.append("no daily_entries extracted")
     return (len(issues) == 0, issues)
 
 
@@ -54,6 +64,8 @@ def validate_stock(data: dict[str, Any]) -> tuple[bool, list[str]]:
 VALIDATORS = {
     "attendance": validate_attendance,
     "pm_poshan": validate_poshan,
+    "daily_pm_poshan": validate_poshan,
+    "monthly_pm_poshan": validate_monthly_poshan,
     "stock": validate_stock,
 }
 

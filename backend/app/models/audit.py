@@ -1,17 +1,32 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, DateTime, ForeignKey, Text
-from sqlalchemy.orm import Mapped, mapped_column
-from app.core.database import Base
+from typing import Optional
+from pydantic import BaseModel, Field
+import uuid
 
 
-class AuditDocument(Base):
-    __tablename__ = "audit_documents"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    doc_type: Mapped[str] = mapped_column(String(60), nullable=False)
-    title: Mapped[str] = mapped_column(String(200), default="")
-    file_path: Mapped[str] = mapped_column(String(500), default="")
-    status: Mapped[str] = mapped_column(String(30), default="uploaded")  # uploaded | verified | missing
-    notes: Mapped[str] = mapped_column(Text, default="")
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+class AuditDocument(BaseModel):
+    """MontyDB document schema for audit documents."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    teacher_id: str  # User ID
+    doc_type: str
+    title: str = ""
+    file_path: str = ""
+    status: str = "uploaded"  # uploaded | verified | missing
+    notes: str = ""
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        from_attributes = True
+        
+    def to_dict(self) -> dict:
+        """Convert to dictionary for storage."""
+        return {
+            "id": self.id,
+            "teacher_id": self.teacher_id,
+            "doc_type": self.doc_type,
+            "title": self.title,
+            "file_path": self.file_path,
+            "status": self.status,
+            "notes": self.notes,
+            "uploaded_at": self.uploaded_at.isoformat() if isinstance(self.uploaded_at, datetime) else self.uploaded_at,
+        }

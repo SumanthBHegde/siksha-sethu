@@ -3,17 +3,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.core.database import Base, engine
-from app import models  # noqa: F401  — ensure all models are imported before create_all
 from app.api import auth, students, attendance, poshan, audit, upload, chat, dashboard
 
 settings = get_settings()
 
 # Ensure data + upload dirs exist
 Path("./data").mkdir(parents=True, exist_ok=True)
+Path("./data/db_repo").mkdir(parents=True, exist_ok=True)
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
-
-Base.metadata.create_all(bind=engine)
+Path(settings.AI_RESPONSE_LOG_DIR).mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="ShikshaSetu API", version="3.0.0")
 

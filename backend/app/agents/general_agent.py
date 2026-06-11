@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from app.agents.state import AgentState
 from app.services.gemini_vision import chat_with_gemini
-from app.core.database import SessionLocal
 from app.services import analytics
 
 
@@ -12,17 +11,13 @@ def general_node(state: AgentState) -> AgentState:
     teacher_id = state["teacher_id"]
 
     # Provide brief school context to Gemini so answers are grounded
-    db = SessionLocal()
-    try:
-        from datetime import date, timedelta
-        today = date.today()
-        ctx = {
-            "attendance_30d": analytics.attendance_summary(db, teacher_id, today - timedelta(days=30), today),
-            "poshan_30d": analytics.poshan_summary(db, teacher_id, today - timedelta(days=30), today),
-            "audit": analytics.audit_readiness(db, teacher_id),
-        }
-    finally:
-        db.close()
+    from datetime import date, timedelta
+    today = date.today()
+    ctx = {
+        "attendance_30d": analytics.attendance_summary(teacher_id, today - timedelta(days=30), today),
+        "poshan_30d": analytics.poshan_summary(teacher_id, today - timedelta(days=30), today),
+        "audit": analytics.audit_readiness(teacher_id),
+    }
 
     system = (
         "You are ShikshaSetu, an AI administrative assistant for Indian government school teachers. "

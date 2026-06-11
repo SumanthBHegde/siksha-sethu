@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import { Upload as UploadIcon, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload as UploadIcon, FileText, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
 
 const REGISTER_TYPES = [
   { value: "attendance", label: "Attendance Register" },
@@ -17,8 +17,10 @@ const REGISTER_TYPES = [
 export default function UploadPage() {
   const [type, setType] = useState("attendance");
   const [file, setFile] = useState<File | null>(null);
+  const [helperFile, setHelperFile] = useState<File | null>(null);
   const [result, setResult] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
+  const [helperLoading, setHelperLoading] = useState(false);
   const [err, setErr] = useState("");
   const [history, setHistory] = useState<any[]>([]);
 
@@ -46,6 +48,24 @@ export default function UploadPage() {
     }
   };
 
+  const submitHelper = async () => {
+    if (!helperFile) return;
+    setHelperLoading(true);
+    setErr("");
+    setResult(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", helperFile);
+      const res = await api.upload.helper(fd);
+      setResult(res);
+      refreshHistory();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setHelperLoading(false);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6">
       <div>
@@ -59,7 +79,7 @@ export default function UploadPage() {
           <TabsTrigger value="history">History ({history.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="upload">
+        <TabsContent value="upload" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Upload Register Image</CardTitle>
@@ -102,6 +122,33 @@ export default function UploadPage() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                AI Helper
+              </CardTitle>
+              <CardDescription>Upload any register image and let AI label, clean, and save it</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="helper-file">Image File</Label>
+                <input
+                  id="helper-file"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setHelperFile(e.target.files?.[0] || null)}
+                  className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+              </div>
+
+              <Button onClick={submitHelper} disabled={!helperFile || helperLoading} className="w-full sm:w-auto">
+                <Sparkles className="h-4 w-4 mr-2" />
+                {helperLoading ? "Labeling & Saving..." : "AI Label & Save"}
+              </Button>
+            </CardContent>
+          </Card>
+
           {result && (
             <Card className="mt-4">
               <CardHeader>
@@ -116,6 +163,11 @@ export default function UploadPage() {
                 <CardDescription>Register type: {result.register_type}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                {result.extracted?.classification_summary && (
+                  <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800">
+                    {result.extracted.classification_summary}
+                  </div>
+                )}
                 {result.validation?.issues?.length > 0 && (
                   <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm">
                     <div className="font-medium text-amber-800 mb-1">Validation issues:</div>

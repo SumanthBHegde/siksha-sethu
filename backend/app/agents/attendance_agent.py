@@ -6,7 +6,6 @@ from datetime import date, timedelta
 from calendar import monthrange
 
 from app.agents.state import AgentState
-from app.core.database import SessionLocal
 from app.services import analytics
 from app.services.gemini_vision import chat_with_gemini
 
@@ -52,23 +51,19 @@ def attendance_node(state: AgentState) -> AgentState:
     teacher_id = state["teacher_id"]
     msg_l = msg.lower()
 
-    db = SessionLocal()
-    try:
-        if "anomal" in msg_l or "low attendance" in msg_l or "missing" in msg_l:
-            anomalies = analytics.attendance_anomalies(db, teacher_id)
-            if not anomalies:
-                reply = "No attendance anomalies detected. All students have ≥75% attendance over the last 30 days."
-            else:
-                lines = [
-                    f"• {a['name']} (Roll {a['roll_no']}): {a['attendance_pct']}% — {a['present_days']}/{a['total_days']} days"
-                    for a in anomalies[:10]
-                ]
-                reply = f"Found {len(anomalies)} students with attendance anomalies (<75%):\n" + "\n".join(lines)
-            return {**state, "agent": "attendance", "data": {"anomalies": anomalies}, "reply": reply}
+    if "anomal" in msg_l or "low attendance" in msg_l or "missing" in msg_l:
+        anomalies = analytics.attendance_anomalies(teacher_id)
+        if not anomalies:
+            reply = "No attendance anomalies detected. All students have ≥75% attendance over the last 30 days."
+        else:
+            lines = [
+                f"• {a['name']} (Roll {a['roll_no']}): {a['attendance_pct']}% — {a['present_days']}/{a['total_days']} days"
+                for a in anomalies[:10]
+            ]
+            reply = f"Found {len(anomalies)} students with attendance anomalies (<75%):\n" + "\n".join(lines)
+        return {**state, "agent": "attendance", "data": {"anomalies": anomalies}, "reply": reply}
 
-        start, end = _parse_date_range(msg)
-        summary = analytics.attendance_summary(db, teacher_id, start, end)
-        reply = _format_summary(summary)
-        return {**state, "agent": "attendance", "data": {"summary": summary}, "reply": reply}
-    finally:
-        db.close()
+    start, end = _parse_date_range(msg)
+    summary = analytics.attendance_summary(teacher_id, start, end)
+    reply = _format_summary(summary)
+    return {**state, "agent": "attendance", "data": {"summary": summary}, "reply": reply}

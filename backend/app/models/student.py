@@ -1,17 +1,32 @@
 from datetime import datetime
-from sqlalchemy import Integer, String, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
-from app.core.database import Base
+from typing import Optional
+from pydantic import BaseModel, Field
+import uuid
 
 
-class Student(Base):
-    __tablename__ = "students"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    roll_no: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(120), nullable=False)
-    grade: Mapped[str] = mapped_column(String(10), default="5")
-    section: Mapped[str] = mapped_column(String(10), default="A")
-    gender: Mapped[str] = mapped_column(String(10), default="")
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+class Student(BaseModel):
+    """MontyDB document schema for student records."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    roll_no: str
+    name: str
+    grade: str = "5"
+    section: str = "A"
+    gender: str = ""
+    teacher_id: str  # User ID
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        from_attributes = True
+        
+    def to_dict(self) -> dict:
+        """Convert to dictionary for storage."""
+        return {
+            "id": self.id,
+            "roll_no": self.roll_no,
+            "name": self.name,
+            "grade": self.grade,
+            "section": self.section,
+            "gender": self.gender,
+            "teacher_id": self.teacher_id,
+            "created_at": self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+        }

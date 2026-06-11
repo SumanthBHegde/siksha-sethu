@@ -1,17 +1,30 @@
 from datetime import date, datetime
-from sqlalchemy import Integer, String, Date, DateTime, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
-from app.core.database import Base
+from typing import Optional
+from pydantic import BaseModel, Field
+import uuid
 
 
-class AttendanceRecord(Base):
-    __tablename__ = "attendance_records"
-    __table_args__ = (UniqueConstraint("student_id", "date", name="uq_student_date"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False, index=True)
-    teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    status: Mapped[str] = mapped_column(String(20), nullable=False)  # present | absent | late
-    source: Mapped[str] = mapped_column(String(20), default="manual")  # manual | register
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+class AttendanceRecord(BaseModel):
+    """MontyDB document schema for attendance records."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    student_id: str  # Student ID
+    teacher_id: str  # User ID
+    date: date
+    status: str  # present | absent | late
+    source: str = "manual"  # manual | register
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        from_attributes = True
+        
+    def to_dict(self) -> dict:
+        """Convert to dictionary for storage."""
+        return {
+            "id": self.id,
+            "student_id": self.student_id,
+            "teacher_id": self.teacher_id,
+            "date": self.date.isoformat() if isinstance(self.date, date) else self.date,
+            "status": self.status,
+            "source": self.source,
+            "created_at": self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
+        }
