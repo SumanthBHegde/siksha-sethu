@@ -11,7 +11,7 @@ class StudentIn(BaseModel):
 
 
 class StudentOut(StudentIn):
-    id: int
+    id: str
 
     class Config:
         from_attributes = True

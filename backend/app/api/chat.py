@@ -26,7 +26,7 @@ def chat(body: ChatIn, current = Depends(get_current_user)):
         content=body.message,
         agent="supervisor"
     )
-    chat_col.insert_one(user_msg.model_dump())
+    chat_col.insert_one(user_msg.model_dump(mode="json"))
     
     # Store assistant response
     assistant_msg = ChatHistory(
@@ -35,7 +35,7 @@ def chat(body: ChatIn, current = Depends(get_current_user)):
         content=result["reply"],
         agent=result["agent"]
     )
-    chat_col.insert_one(assistant_msg.model_dump())
+    chat_col.insert_one(assistant_msg.model_dump(mode="json"))
 
     return ChatOut(reply=result["reply"], agent=result["agent"], data=result.get("data"))
 

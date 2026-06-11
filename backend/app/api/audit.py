@@ -50,7 +50,7 @@ async def upload_document(
         notes=notes,
         status="uploaded",
     )
-    audit_col.insert_one(doc.model_dump())
+    audit_col.insert_one(doc.model_dump(mode="json"))
     
     return {"id": doc.id, "file_path": doc.file_path, "doc_type": doc.doc_type}
 

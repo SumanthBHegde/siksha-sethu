@@ -50,7 +50,7 @@ def upsert_bulk(body: AttendanceBulkIn, current = Depends(get_current_user)):
                 date=body.date,
                 status=entry.status,
             )
-            attendance_col.insert_one(record.model_dump())
+            attendance_col.insert_one(record.model_dump(mode="json"))
         
         saved += 1
     

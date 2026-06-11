@@ -4,7 +4,7 @@ from typing import List
 
 
 class AttendanceEntry(BaseModel):
-    student_id: int
+    student_id: str
     status: str  # present | absent | late
 
 
@@ -14,8 +14,8 @@ class AttendanceBulkIn(BaseModel):
 
 
 class AttendanceOut(BaseModel):
-    id: int
-    student_id: int
+    id: str
+    student_id: str
     date: date
     status: str
     source: str

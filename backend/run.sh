@@ -14,5 +14,4 @@ if [ ! -f ".env" ]; then
   echo "→ Created .env from .env.example. Add your GOOGLE_API_KEY before using register upload / chat."
 fi
 
-python seed.py || true
 uvicorn app.main:app --reload --port 8000

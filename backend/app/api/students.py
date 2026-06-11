@@ -40,7 +40,7 @@ def create_student(body: StudentIn, current = Depends(get_current_user)):
     )
     
     # Insert into collection
-    student_dict = student.model_dump()
+    student_dict = student.model_dump(mode="json")
     students_collection.insert_one(student_dict)
     
     student_dict.pop("_id", None)

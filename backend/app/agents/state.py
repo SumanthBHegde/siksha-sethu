@@ -4,7 +4,7 @@ from typing import TypedDict, Any, Literal
 
 
 class AgentState(TypedDict, total=False):
-    teacher_id: int
+    teacher_id: str
     user_message: str
     intent: Literal["attendance", "pm_poshan", "audit", "general"]
     agent: str

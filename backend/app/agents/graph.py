@@ -58,7 +58,7 @@ def get_graph():
     return _graph
 
 
-def run_agent(teacher_id: int, message: str) -> dict:
+def run_agent(teacher_id: str, message: str) -> dict:
     graph = get_graph()
     result = graph.invoke({"teacher_id": teacher_id, "user_message": message})
     return {

@@ -35,7 +35,7 @@ def register(body: RegisterIn):
     )
     
     # Insert document into collection using MQL syntax
-    user_dict = user_data.model_dump()
+    user_dict = user_data.model_dump(mode="json")
     users_collection.insert_one(user_dict)
     
     # Generate token

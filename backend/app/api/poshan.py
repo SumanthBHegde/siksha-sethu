@@ -19,7 +19,7 @@ def add_meal(body: MealIn, current = Depends(get_current_user)):
     current_id = current.get("id")
     
     record = MealRecord(**body.model_dump(), teacher_id=current_id)
-    meal_col.insert_one(record.model_dump())
+    meal_col.insert_one(record.model_dump(mode="json"))
     return {"id": record.id}
 
 
@@ -30,7 +30,7 @@ def add_stock(body: StockIn, current = Depends(get_current_user)):
     current_id = current.get("id")
     
     record = StockRecord(**body.model_dump(), teacher_id=current_id)
-    stock_col.insert_one(record.model_dump())
+    stock_col.insert_one(record.model_dump(mode="json"))
     return {"id": record.id}
 
 
